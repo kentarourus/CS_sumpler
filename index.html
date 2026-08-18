@@ -69,10 +69,14 @@
         <div id="drop-zone" class="drop-zone">
           <div class="drop-zone-inner">
             <span class="drop-icon">📁</span>
-            <p>音声ファイルをここにドラッグ＆ドロップ</p>
-            <p class="drop-hint">MP3 / WAV / OGG / M4A / FLAC / WebM</p>
-            <button id="btn-browse" class="btn-secondary" type="button">またはファイルを選択</button>
-            <input type="file" id="file-browse" multiple accept="audio/*,.mp3,.wav,.ogg,.m4a,.flac,.webm,.aac" class="hidden" />
+            <p>音声ファイルやフォルダをここにドラッグ＆ドロップ</p>
+            <p class="drop-hint">MP3 / WAV / OGG / M4A / FLAC / WebM / AAC等</p>
+            <div class="drop-actions">
+              <button id="btn-browse" class="btn-secondary" type="button">📄 ファイル選択</button>
+              <button id="btn-browse-folder" class="btn-secondary" type="button">📁 フォルダ選択</button>
+            </div>
+            <input type="file" id="file-browse" multiple accept="audio/*,.mp3,.wav,.ogg,.m4a,.flac,.webm,.aac,.wma,.aiff,.caf" class="hidden" />
+            <input type="file" id="file-browse-folder" webkitdirectory directory multiple class="hidden" />
           </div>
         </div>
 
