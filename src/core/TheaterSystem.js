@@ -389,6 +389,65 @@ export class TheaterSystem {
   }
 
   /**
+   * Pause a specific active track
+   * @param {string} trackId
+   */
+  pauseTrack(trackId) {
+    this.audio.pauseTrack(trackId);
+  }
+
+  /**
+   * Resume a specific active track
+   * @param {string} trackId
+   */
+  resumeTrack(trackId) {
+    this.audio.resumeTrack(trackId);
+  }
+
+  /**
+   * Toggle pause/resume for a specific track
+   * @param {string} trackId
+   */
+  toggleTrack(trackId) {
+    this.audio.toggleTrack(trackId);
+  }
+
+  /**
+   * Stop a specific active track
+   * @param {string} trackId
+   * @param {number} [fadeDuration]
+   */
+  stopTrack(trackId, fadeDuration) {
+    const fade = fadeDuration !== undefined
+      ? fadeDuration
+      : (this.project.settings.enableClicklessStop ? (this.project.settings.stopFadeDuration || 0.03) : 0);
+    this.audio.stopTrack(trackId, fade);
+  }
+
+  /**
+   * Set volume for a specific active track
+   * @param {string} trackId
+   * @param {number} volume
+   */
+  setTrackVolume(trackId, volume) {
+    this.audio.setTrackVolume(trackId, volume);
+  }
+
+  /**
+   * Pause all active playing tracks
+   */
+  pauseAll() {
+    this.audio.pauseAll();
+  }
+
+  /**
+   * Resume all paused tracks
+   */
+  resumeAll() {
+    this.audio.resumeAll();
+  }
+
+  /**
    * Panic Stop (Esc): Emergency stop for all active audio
    */
   panicStop() {

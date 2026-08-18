@@ -46,6 +46,8 @@ function cacheDom() {
   dom.dropZoneInner   = dom.dropZone?.querySelector('.drop-zone-inner');
   dom.btnBrowse       = $('#btn-browse');
   dom.fileBrowse      = $('#file-browse');
+  dom.btnBrowseFolder = $('#btn-browse-folder');
+  dom.fileBrowseFolder = $('#file-browse-folder');
   dom.soundList       = $('#sound-list');
 
   // Setup - Cues
@@ -60,17 +62,30 @@ function cacheDom() {
   // Setup - Keyboard
   dom.keyboardVisual  = $('#keyboard-visual');
 
+  // Setup - Active Tracks Manager
+  dom.setupNowPlaying   = $('#setup-now-playing');
+  dom.setupActiveCount  = $('#setup-active-count');
+  dom.setupActiveTracks = $('#setup-active-tracks');
+  dom.btnPauseAllSetup  = $('#btn-pause-all-setup');
+  dom.btnResumeAllSetup = $('#btn-resume-all-setup');
+  dom.btnStopAllSetup   = $('#btn-stop-all-setup');
+
   // Live
-  dom.modeSetup       = $('#mode-setup');
-  dom.modeLive        = $('#mode-live');
-  dom.liveActName     = $('#live-act-name');
-  dom.liveCueNum      = $('#live-cue-num');
-  dom.liveCueTotal    = $('#live-cue-total');
-  dom.liveNextName    = $('#live-next-name');
-  dom.liveCueList     = $('#live-cue-list');
-  dom.liveKeyStrip    = $('#live-key-strip');
-  dom.liveActiveTracks = $('#live-active-tracks');
-  dom.btnPanic        = $('#btn-panic');
+  dom.modeSetup         = $('#mode-setup');
+  dom.modeLive          = $('#mode-live');
+  dom.liveActName       = $('#live-act-name');
+  dom.liveCueNum        = $('#live-cue-num');
+  dom.liveCueTotal      = $('#live-cue-total');
+  dom.liveNextName      = $('#live-next-name');
+  dom.liveCueList       = $('#live-cue-list');
+  dom.liveKeyStrip      = $('#live-key-strip');
+  dom.liveNowPlaying    = $('#live-now-playing');
+  dom.liveActiveCount   = $('#live-active-count');
+  dom.liveActiveTracks  = $('#live-active-tracks');
+  dom.btnPauseAllLive   = $('#btn-pause-all-live');
+  dom.btnResumeAllLive  = $('#btn-resume-all-live');
+  dom.btnStopAllLive    = $('#btn-stop-all-live');
+  dom.btnPanic          = $('#btn-panic');
 
   // Modals
   dom.modalSound      = $('#modal-sound-settings');
@@ -110,8 +125,11 @@ function initUI() {
   bindCueControls();
   bindKeyboardVisual();
   bindLiveControls();
+  bindActiveTracksControls();
   bindModals();
   subscribeSystemEvents();
+
+  startActiveTracksTimer();
 
   // Initial render
   syncProjectName();
@@ -120,6 +138,7 @@ function initUI() {
   renderActSelect();
   renderCueList();
   renderKeyboardVisual();
+  renderActiveTracksManager();
 }
 
 // ============================================================================
@@ -249,8 +268,81 @@ function switchMode(mode) {
   }
 }
 
+// Audio extension lookup set
+const AUDIO_EXTENSIONS = new Set([
+  '.mp3', '.wav', '.ogg', '.m4a', '.aac', '.flac', '.webm', '.opus', '.wma', '.aiff', '.aif', '.caf'
+]);
+
+function isAudioFile(file) {
+  if (file.type && file.type.startsWith('audio/')) return true;
+  const name = file.name || '';
+  const lastDot = name.lastIndexOf('.');
+  if (lastDot !== -1) {
+    const ext = name.substring(lastDot).toLowerCase();
+    if (AUDIO_EXTENSIONS.has(ext)) return true;
+  }
+  return false;
+}
+
+/**
+ * Recursively extracts all files from dropped items (supporting folders and subfolders)
+ */
+async function extractFilesFromDataTransfer(dataTransfer) {
+  const items = dataTransfer.items;
+  if (!items || items.length === 0) {
+    return Array.from(dataTransfer.files || []);
+  }
+
+  const entries = [];
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    if (item.webkitGetAsEntry) {
+      const entry = item.webkitGetAsEntry();
+      if (entry) entries.push(entry);
+    }
+  }
+
+  if (entries.length === 0) {
+    return Array.from(dataTransfer.files || []);
+  }
+
+  const files = [];
+
+  async function traverseEntry(entry) {
+    if (entry.isFile) {
+      return new Promise((resolve) => {
+        entry.file((file) => {
+          file.relativePath = entry.fullPath ? entry.fullPath.replace(/^\//, '') : file.name;
+          files.push(file);
+          resolve();
+        }, () => resolve());
+      });
+    } else if (entry.isDirectory) {
+      const dirReader = entry.createReader();
+      const readAllEntries = async () => {
+        const batch = await new Promise((resolve) => {
+          dirReader.readEntries(resolve, () => resolve([]));
+        });
+        if (batch.length > 0) {
+          for (const child of batch) {
+            await traverseEntry(child);
+          }
+          await readAllEntries();
+        }
+      };
+      await readAllEntries();
+    }
+  }
+
+  for (const entry of entries) {
+    await traverseEntry(entry);
+  }
+
+  return files;
+}
+
 // ============================================================================
-// SOUND LIBRARY / DROP ZONE
+// SOUND LIBRARY / DROP ZONE (FILES & FOLDERS)
 // ============================================================================
 function bindDropZone() {
   const dz = dom.dropZoneInner;
@@ -260,39 +352,91 @@ function bindDropZone() {
   ['dragleave', 'drop'].forEach(evt => {
     dz.addEventListener(evt, () => dz.classList.remove('drag-over'));
   });
-  dz.addEventListener('drop', (e) => {
+  dz.addEventListener('drop', async (e) => {
     e.preventDefault();
-    handleFiles(e.dataTransfer.files);
+    dz.classList.remove('drag-over');
+    const files = await extractFilesFromDataTransfer(e.dataTransfer);
+    await handleFiles(files);
   });
 
+  // File selection
   dom.btnBrowse.addEventListener('click', () => dom.fileBrowse.click());
-  dom.fileBrowse.addEventListener('change', (e) => {
-    handleFiles(e.target.files);
+  dom.fileBrowse.addEventListener('change', async (e) => {
+    await handleFiles(e.target.files);
     dom.fileBrowse.value = '';
   });
+
+  // Folder selection
+  if (dom.btnBrowseFolder && dom.fileBrowseFolder) {
+    dom.btnBrowseFolder.addEventListener('click', () => dom.fileBrowseFolder.click());
+    dom.fileBrowseFolder.addEventListener('change', async (e) => {
+      await handleFiles(e.target.files);
+      dom.fileBrowseFolder.value = '';
+    });
+  }
 }
 
 async function handleFiles(fileList) {
-  for (const file of fileList) {
+  const rawList = Array.from(fileList || []);
+  const audioFiles = rawList.filter(isAudioFile);
+
+  if (audioFiles.length === 0) {
+    if (rawList.length > 0) {
+      showToast('対象の音声ファイル（MP3/WAV等）が見つかりませんでした', 'error');
+    }
+    return;
+  }
+
+  // Sort files naturally by relative path / name
+  audioFiles.sort((a, b) => {
+    const nameA = a.relativePath || a.webkitRelativePath || a.name || '';
+    const nameB = b.relativePath || b.webkitRelativePath || b.name || '';
+    return nameA.localeCompare(nameB, undefined, { numeric: true, sensitivity: 'base' });
+  });
+
+  if (audioFiles.length > 3) {
+    showToast(`${audioFiles.length}個の音声ファイルを読み込み中...`, 'info', 2000);
+  }
+
+  let successCount = 0;
+  let failCount = 0;
+
+  for (const file of audioFiles) {
     try {
+      const cleanName = (file.name || 'sound').replace(/\.[^/.]+$/, '');
       await system.registerAudioFile(file, {
+        name: cleanName,
         fileName: file.name,
-        fileType: file.type,
+        fileType: file.type || 'audio/mpeg',
         fileSize: file.size
       });
-      showToast(`登録: ${file.name}`, 'success');
+      successCount++;
     } catch (err) {
-      showToast(`失敗: ${file.name} - ${err.message}`, 'error');
+      console.warn(`Failed to register ${file.name}:`, err);
+      failCount++;
     }
   }
+
   renderSoundList();
   renderKeyboardVisual();
+
+  if (successCount === 1) {
+    showToast(`登録: ${audioFiles[0].name}`, 'success');
+  } else if (successCount > 1) {
+    showToast(`${successCount}個の音声ファイルを登録しました${failCount > 0 ? ` (${failCount}個失敗)` : ''}`, successCount > 0 ? 'success' : 'error');
+  }
 }
 
 function renderSoundList() {
   const sounds = system.getAllSounds();
   dom.soundCount.textContent = sounds.length;
   dom.soundList.innerHTML = '';
+
+  const activeSoundIds = new Set(
+    Array.from(system.audio.activeTracks.values())
+      .filter(t => t.state === 'playing' || t.state === 'paused')
+      .map(t => t.soundId)
+  );
 
   sounds.forEach(s => {
     const li = document.createElement('li');
@@ -302,24 +446,61 @@ function renderSoundList() {
 
     const duration = s.duration ? formatTime(s.duration) : '--:--';
     const size = s.fileSize ? formatFileSize(s.fileSize) : '';
+    const isPlaying = activeSoundIds.has(s.id);
+
+    const isOverlap = (s.defaultOverlapMode || 'overlap') === 'overlap';
 
     li.innerHTML = `
       <span class="sound-item-icon">🔈</span>
       <div class="sound-item-info">
         <div class="sound-item-name">${escHtml(s.name)}</div>
-        <div class="sound-item-meta">${duration}${size ? ' · ' + size : ''}</div>
+        <div class="sound-item-meta">
+          ${duration}${size ? ' · ' + size : ''}
+          <button type="button" class="btn-overlap-toggle ${isOverlap ? 'is-overlap' : ''}" title="連打時の挙動（クリックで 重ね再生 ON/OFF 切り替え）">
+            重ね再生: ${isOverlap ? 'ON' : 'OFF'}
+          </button>
+        </div>
       </div>
       <div class="sound-item-actions">
-        <button class="btn-icon-sm btn-sound-play" title="試聴">▶</button>
+        <button class="btn-icon-sm btn-sound-play ${isPlaying ? 'is-playing' : ''}" title="${isPlaying ? '停止' : '試聴'}">
+          ${isPlaying ? '⏹' : '▶'}
+        </button>
         <button class="btn-icon-sm btn-sound-edit" title="編集">⚙</button>
         <button class="btn-icon-sm btn-remove btn-sound-delete" title="削除">✕</button>
       </div>
     `;
 
-    // Play preview
-    li.querySelector('.btn-sound-play').addEventListener('click', (e) => {
+    // Overlap mode toggle
+    const overlapBtn = li.querySelector('.btn-overlap-toggle');
+    if (overlapBtn) {
+      overlapBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const currentMode = s.defaultOverlapMode || 'overlap';
+        s.defaultOverlapMode = (currentMode === 'overlap') ? 'restart' : 'overlap';
+        system.saveProject();
+        renderSoundList();
+        const newIsOverlap = s.defaultOverlapMode === 'overlap';
+        showToast(`「${s.name}」の重ね再生: ${newIsOverlap ? 'ON (連打時に音を重ねる)' : 'OFF (連打時は最初から鳴らし直す)'}`, 'info', 2000);
+      });
+    }
+
+    // Play / Stop preview toggle
+    const playBtn = li.querySelector('.btn-sound-play');
+    playBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      system.playDirectSound(s.id);
+      const existingTracks = Array.from(system.audio.activeTracks.values())
+        .filter(t => t.soundId === s.id);
+
+      if (existingTracks.length > 0) {
+        // Stop currently playing instance(s)
+        for (const t of existingTracks) {
+          system.stopTrack(t.id);
+        }
+      } else {
+        // Play sound
+        system.playDirectSound(s.id);
+      }
+      renderActiveTracksManager();
     });
 
     // Edit
@@ -636,48 +817,261 @@ function renderLiveKeyStrip() {
   });
 }
 
-function renderLiveActiveTracks() {
-  const tracks = system.getActiveTracks();
-  dom.liveActiveTracks.innerHTML = '';
+function bindActiveTracksControls() {
+  // Live mode batch actions
+  if (dom.btnPauseAllLive) {
+    dom.btnPauseAllLive.addEventListener('click', () => {
+      system.pauseAll();
+      renderActiveTracksManager();
+    });
+  }
+  if (dom.btnResumeAllLive) {
+    dom.btnResumeAllLive.addEventListener('click', () => {
+      system.resumeAll();
+      renderActiveTracksManager();
+    });
+  }
+  if (dom.btnStopAllLive) {
+    dom.btnStopAllLive.addEventListener('click', () => {
+      system.panicStop();
+      renderActiveTracksManager();
+    });
+  }
 
+  // Setup mode batch actions
+  if (dom.btnPauseAllSetup) {
+    dom.btnPauseAllSetup.addEventListener('click', () => {
+      system.pauseAll();
+      renderActiveTracksManager();
+    });
+  }
+  if (dom.btnResumeAllSetup) {
+    dom.btnResumeAllSetup.addEventListener('click', () => {
+      system.resumeAll();
+      renderActiveTracksManager();
+    });
+  }
+  if (dom.btnStopAllSetup) {
+    dom.btnStopAllSetup.addEventListener('click', () => {
+      system.panicStop();
+      renderActiveTracksManager();
+    });
+  }
+}
+
+// ============================================================================
+// ACTIVE TRACKS MANAGER (SETUP & LIVE)
+// ============================================================================
+function renderActiveTracksManager() {
+  const tracks = system.getActiveTracks();
+  const count = tracks.length;
+
+  // Setup mode container
+  if (dom.setupNowPlaying && dom.setupActiveTracks) {
+    if (count > 0) {
+      dom.setupNowPlaying.classList.remove('hidden');
+      if (dom.setupActiveCount) dom.setupActiveCount.textContent = count;
+      renderTracksList(dom.setupActiveTracks, tracks);
+    } else {
+      dom.setupNowPlaying.classList.add('hidden');
+      if (dom.setupActiveCount) dom.setupActiveCount.textContent = '0';
+      dom.setupActiveTracks.innerHTML = '';
+    }
+  }
+
+  // Live mode container
+  if (dom.liveActiveTracks) {
+    if (dom.liveActiveCount) dom.liveActiveCount.textContent = count;
+    renderTracksList(dom.liveActiveTracks, tracks);
+  }
+}
+
+function renderTracksList(containerEl, tracks) {
   if (tracks.length === 0) {
-    dom.liveActiveTracks.innerHTML = '<div style="font-size:0.75rem;color:var(--text-muted);padding:4px 0;">再生中の音声はありません</div>';
+    containerEl.innerHTML = '<div style="font-size:0.75rem;color:var(--text-muted);padding:8px 0;text-align:center;">再生中の音声はありません</div>';
     return;
   }
 
-  tracks.forEach(t => {
-    const bar = document.createElement('div');
-    bar.className = 'active-track-bar';
-    const stateClass = t.state === 'playing' ? 'state-playing' : 'state-paused';
-    const stateLabel = t.state === 'playing' ? '再生中' : '一時停止';
-    const progressPct = Math.round(t.progress * 100);
-    const fillClass = t.state === 'paused' ? 'paused' : '';
+  // Check if we can do an in-place update of existing elements to prevent DOM thrashing
+  const existingCards = containerEl.querySelectorAll('.active-track-card');
+  const existingIds = Array.from(existingCards).map(c => c.dataset.trackId);
+  const currentIds = tracks.map(t => t.id);
 
-    bar.innerHTML = `
-      <span class="active-track-name">${escHtml(t.name || t.soundId)}</span>
-      <span class="active-track-state ${stateClass}">${stateLabel}</span>
-      <div class="active-track-progress">
-        <div class="active-track-progress-fill ${fillClass}" style="width:${progressPct}%"></div>
+  const isStructureSame = existingIds.length === currentIds.length &&
+    existingIds.every((id, idx) => id === currentIds[idx]);
+
+  if (isStructureSame) {
+    // In-place update progress and states
+    tracks.forEach(t => {
+      const card = containerEl.querySelector(`[data-track-id="${t.id}"]`);
+      if (!card) return;
+
+      const isPlaying = t.state === 'playing';
+      card.classList.toggle('is-playing', isPlaying);
+      card.classList.toggle('is-paused', !isPlaying);
+
+      const stateBadge = card.querySelector('.active-track-state');
+      if (stateBadge) {
+        stateBadge.className = `active-track-state ${isPlaying ? 'state-playing' : 'state-paused'}`;
+        stateBadge.textContent = isPlaying ? '● 再生中' : '❚❚ 一時停止';
+      }
+
+      const progressFill = card.querySelector('.active-track-progress-fill');
+      if (progressFill) {
+        const progressPct = Math.round(t.progress * 100);
+        progressFill.style.width = `${progressPct}%`;
+        progressFill.classList.toggle('paused', !isPlaying);
+      }
+
+      const timeSpan = card.querySelector('.active-track-time');
+      if (timeSpan) {
+        const progressPct = Math.round(t.progress * 100);
+        timeSpan.textContent = `${formatTime(t.currentTime)} / ${formatTime(t.duration)} (${progressPct}%)`;
+      }
+
+      const toggleBtn = card.querySelector('.btn-track-toggle');
+      if (toggleBtn) {
+        toggleBtn.textContent = isPlaying ? '⏸ 一時停止' : '▶ 再開';
+        toggleBtn.className = `btn-track-action btn-track-toggle ${isPlaying ? '' : 'btn-track-resume'}`;
+      }
+    });
+    return;
+  }
+
+  // Re-render full list
+  containerEl.innerHTML = '';
+  tracks.forEach(t => {
+    const card = document.createElement('div');
+    const isPlaying = t.state === 'playing';
+    card.className = `active-track-card ${isPlaying ? 'is-playing' : 'is-paused'}`;
+    card.dataset.trackId = t.id;
+
+    const stateBadgeClass = isPlaying ? 'state-playing' : 'state-paused';
+    const stateLabel = isPlaying ? '● 再生中' : '❚❚ 一時停止';
+    const progressPct = Math.round(t.progress * 100);
+    const fillClass = isPlaying ? '' : 'paused';
+    const timeDisplay = `${formatTime(t.currentTime)} / ${formatTime(t.duration)} (${progressPct}%)`;
+
+    card.innerHTML = `
+      <div class="active-track-info">
+        <span class="active-track-name" title="${escHtml(t.name)}">${escHtml(t.name || t.soundId)}</span>
+        <span class="active-track-state ${stateBadgeClass}">${stateLabel}</span>
       </div>
-      <span class="active-track-time">${formatTime(t.currentTime)}</span>
+      <div class="active-track-progress-group">
+        <div class="active-track-progress">
+          <div class="active-track-progress-fill ${fillClass}" style="width:${progressPct}%"></div>
+        </div>
+        <span class="active-track-time">${timeDisplay}</span>
+      </div>
+      <div class="active-track-controls">
+        <button type="button" class="btn-track-action btn-track-toggle ${isPlaying ? '' : 'btn-track-resume'}" title="${isPlaying ? '一時停止' : '再生再開'}">
+          ${isPlaying ? '⏸ 一時停止' : '▶ 再開'}
+        </button>
+        <button type="button" class="btn-track-action btn-track-stop" title="停止">
+          ⏹ 停止
+        </button>
+        <div class="active-track-vol-group" title="音量">
+          <span style="font-size:0.75rem;">🔊</span>
+          <input type="range" class="slider-track-vol" min="0" max="200" value="${Math.round(t.volume * 100)}" />
+        </div>
+      </div>
     `;
-    dom.liveActiveTracks.appendChild(bar);
+
+    // Toggle Pause/Resume
+    card.querySelector('.btn-track-toggle').addEventListener('click', (e) => {
+      e.stopPropagation();
+      system.toggleTrack(t.id);
+      renderActiveTracksManager();
+    });
+
+    // Stop
+    card.querySelector('.btn-track-stop').addEventListener('click', (e) => {
+      e.stopPropagation();
+      system.stopTrack(t.id);
+      renderActiveTracksManager();
+    });
+
+    // Individual Volume slider
+    const volSlider = card.querySelector('.slider-track-vol');
+    volSlider.addEventListener('input', (e) => {
+      e.stopPropagation();
+      const newVol = parseInt(volSlider.value, 10) / 100;
+      system.setTrackVolume(t.id, newVol);
+    });
+
+    containerEl.appendChild(card);
   });
 }
 
 function startActiveTracksTimer() {
   stopActiveTracksTimer();
   activeTracksTimer = setInterval(() => {
-    if (currentMode === 'live') {
-      renderLiveActiveTracks();
+    const tracks = system.getActiveTracks();
+    if (tracks.length > 0 || (dom.setupActiveTracks && dom.setupActiveTracks.children.length > 0)) {
+      renderActiveTracksManager();
     }
-  }, 200);
+  }, 150);
 }
 
 function stopActiveTracksTimer() {
   if (activeTracksTimer) {
     clearInterval(activeTracksTimer);
     activeTracksTimer = null;
+  }
+// Helper to sync sound list play/stop button states with currently active tracks
+function updateSoundListPlayButtons() {
+  if (!dom.soundList) return;
+  const activeSoundIds = new Set(
+    Array.from(system.audio.activeTracks.values())
+      .filter(t => t.state === 'playing' || t.state === 'paused')
+      .map(t => t.soundId)
+  );
+
+  const items = dom.soundList.querySelectorAll('.sound-item');
+  items.forEach(li => {
+    const soundId = li.dataset.soundId;
+    const btn = li.querySelector('.btn-sound-play');
+    if (!btn) return;
+    const isPlaying = activeSoundIds.has(soundId);
+    btn.textContent = isPlaying ? '⏹' : '▶';
+    btn.title = isPlaying ? '停止' : '試聴';
+    btn.classList.toggle('is-playing', isPlaying);
+  });
+}
+
+// Active test play tracks in modals
+let currentSoundTestTrackId = null;
+let currentCueTestTrackId = null;
+
+function resetSoundTestBtn() {
+  const btn = $('#btn-sound-test');
+  if (btn) {
+    btn.textContent = '▶ 試聴';
+    btn.classList.remove('is-playing');
+  }
+  currentSoundTestTrackId = null;
+}
+
+function resetCueTestBtn() {
+  const btn = $('#btn-cue-test');
+  if (btn) {
+    btn.textContent = '▶ 試聴';
+    btn.classList.remove('is-playing');
+  }
+  currentCueTestTrackId = null;
+}
+
+function stopSoundModalPreview() {
+  if (currentSoundTestTrackId) {
+    system.stopTrack(currentSoundTestTrackId);
+    resetSoundTestBtn();
+  }
+}
+
+function stopCueModalPreview() {
+  if (currentCueTestTrackId) {
+    system.stopTrack(currentCueTestTrackId);
+    resetCueTestBtn();
   }
 }
 
@@ -688,6 +1082,8 @@ function bindModals() {
   // --- Sound Settings Modal ---
   dom.formSound.addEventListener('submit', (e) => {
     e.preventDefault();
+    stopSoundModalPreview();
+
     const soundId = $('#modal-sound-id').value;
     const soundItem = system.getSound(soundId);
     if (!soundItem) return;
@@ -705,16 +1101,39 @@ function bindModals() {
     showToast('音声設定を保存しました', 'success');
   });
 
-  $('#btn-sound-cancel').addEventListener('click', () => dom.modalSound.close());
+  $('#btn-sound-cancel').addEventListener('click', () => {
+    stopSoundModalPreview();
+    dom.modalSound.close();
+  });
 
+  dom.modalSound.addEventListener('close', () => {
+    stopSoundModalPreview();
+  });
+
+  // Sound Test Play / Stop Toggle
   $('#btn-sound-test').addEventListener('click', () => {
     const soundId = $('#modal-sound-id').value;
-    if (soundId) {
-      system.audio.playSound(soundId, {
+    if (!soundId) return;
+
+    if (currentSoundTestTrackId && system.audio.activeTracks.has(currentSoundTestTrackId)) {
+      // Currently playing -> Stop preview
+      stopSoundModalPreview();
+      renderActiveTracksManager();
+    } else {
+      // Not playing -> Start preview with current form values
+      const track = system.audio.playSound(soundId, {
         volume: parseInt($('#modal-sound-volume').value, 10) / 100,
         playbackRate: parseInt($('#modal-sound-rate').value, 10) / 100,
-        detune: parseInt($('#modal-sound-detune').value, 10)
+        detune: parseInt($('#modal-sound-detune').value, 10),
+        overlapMode: 'restart'
       });
+      if (track) {
+        currentSoundTestTrackId = track.id;
+        const btn = $('#btn-sound-test');
+        btn.textContent = '⏹ 停止';
+        btn.classList.add('is-playing');
+      }
+      renderActiveTracksManager();
     }
   });
 
@@ -732,6 +1151,8 @@ function bindModals() {
   // --- Cue Edit Modal ---
   dom.formCue.addEventListener('submit', (e) => {
     e.preventDefault();
+    stopCueModalPreview();
+
     const cueId = $('#modal-cue-id').value;
     const updates = {
       name: $('#modal-cue-name').value.trim() || '新規キュー',
@@ -758,7 +1179,47 @@ function bindModals() {
     showToast(cueId ? 'キューを更新しました' : 'キューを追加しました', 'success');
   });
 
-  $('#btn-cue-cancel').addEventListener('click', () => dom.modalCue.close());
+  $('#btn-cue-cancel').addEventListener('click', () => {
+    stopCueModalPreview();
+    dom.modalCue.close();
+  });
+
+  dom.modalCue.addEventListener('close', () => {
+    stopCueModalPreview();
+  });
+
+  // Cue Test Play / Stop Toggle
+  const btnCueTest = $('#btn-cue-test');
+  if (btnCueTest) {
+    btnCueTest.addEventListener('click', () => {
+      const soundId = $('#modal-cue-sound').value;
+      if (!soundId) {
+        showToast('音声が選択されていません', 'info');
+        return;
+      }
+
+      if (currentCueTestTrackId && system.audio.activeTracks.has(currentCueTestTrackId)) {
+        // Currently playing -> Stop cue preview
+        stopCueModalPreview();
+        renderActiveTracksManager();
+      } else {
+        // Not playing -> Start cue preview with current form values
+        const track = system.audio.playSound(soundId, {
+          volume: parseInt($('#modal-cue-volume').value, 10) / 100,
+          playbackRate: parseInt($('#modal-cue-rate').value, 10) / 100,
+          detune: parseInt($('#modal-cue-detune').value, 10),
+          loop: $('#modal-cue-loop').checked,
+          overlapMode: 'restart'
+        });
+        if (track) {
+          currentCueTestTrackId = track.id;
+          btnCueTest.textContent = '⏹ 停止';
+          btnCueTest.classList.add('is-playing');
+        }
+        renderActiveTracksManager();
+      }
+    });
+  }
 
   // Cue slider labels
   $('#modal-cue-volume').addEventListener('input', function() {
@@ -903,19 +1364,15 @@ function subscribeSystemEvents() {
     else renderCueList();
   });
 
-  // Audio
-  system.on('track:play', () => {
-    if (currentMode === 'live') renderLiveActiveTracks();
-  });
-  system.on('track:stop', () => {
-    if (currentMode === 'live') renderLiveActiveTracks();
-  });
-  system.on('track:ended', () => {
-    if (currentMode === 'live') renderLiveActiveTracks();
-  });
-  system.on('all:stop', () => {
-    if (currentMode === 'live') renderLiveActiveTracks();
-  });
+  // Audio events (active tracks manager)
+  system.on('track:play', () => renderActiveTracksManager());
+  system.on('track:pause', () => renderActiveTracksManager());
+  system.on('track:resume', () => renderActiveTracksManager());
+  system.on('track:stop', () => renderActiveTracksManager());
+  system.on('track:ended', () => renderActiveTracksManager());
+  system.on('all:stop', () => renderActiveTracksManager());
+  system.on('all:pause', () => renderActiveTracksManager());
+  system.on('all:resume', () => renderActiveTracksManager());
 
   // Volume
   system.on('volume:change', (data) => {

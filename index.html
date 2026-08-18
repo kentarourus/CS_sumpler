@@ -167,6 +167,23 @@
         </div>
         <p class="key-hint">キーをクリック → 割り当てる音声を選択</p>
       </section>
+
+      <!-- Bottom docked Active Tracks manager for Setup mode -->
+      <section id="setup-now-playing" class="setup-now-playing hidden">
+        <div class="now-playing-header">
+          <div class="now-playing-title-group">
+            <span class="now-playing-icon">🎵</span>
+            <span class="now-playing-title">現在再生中の音声</span>
+            <span id="setup-active-count" class="badge">0</span>
+          </div>
+          <div class="now-playing-global-actions">
+            <button id="btn-pause-all-setup" class="btn-icon-text" type="button" title="すべての再生音を一時停止">⏸ 全一時停止</button>
+            <button id="btn-resume-all-setup" class="btn-icon-text" type="button" title="すべての一時停止音を再開">▶ 全再開</button>
+            <button id="btn-stop-all-setup" class="btn-icon-text btn-danger-sm" type="button" title="すべての音を停止">⏹ 全停止</button>
+          </div>
+        </div>
+        <div id="setup-active-tracks" class="active-tracks-container"></div>
+      </section>
     </main>
 
     <!-- ============ LIVE / PERFORMANCE MODE ============ -->
@@ -197,10 +214,21 @@
           <div id="live-key-strip" class="live-key-strip"></div>
         </section>
 
-        <!-- Active tracks / Now Playing -->
-        <section class="live-now-playing">
-          <div class="now-playing-header">再生中</div>
-          <div id="live-active-tracks" class="live-active-tracks"></div>
+        <!-- Active tracks / Now Playing Manager -->
+        <section class="live-now-playing" id="live-now-playing">
+          <div class="now-playing-header">
+            <div class="now-playing-title-group">
+              <span class="now-playing-icon">🎵</span>
+              <span class="now-playing-title">現在再生中の音声</span>
+              <span id="live-active-count" class="badge">0</span>
+            </div>
+            <div class="now-playing-global-actions">
+              <button id="btn-pause-all-live" class="btn-icon-text" type="button" title="すべての再生音を一時停止">⏸ 一時停止</button>
+              <button id="btn-resume-all-live" class="btn-icon-text" type="button" title="すべての一時停止音を再開">▶ 再開</button>
+              <button id="btn-stop-all-live" class="btn-icon-text btn-danger-sm" type="button" title="すべての音を停止">⏹ 全停止</button>
+            </div>
+          </div>
+          <div id="live-active-tracks" class="active-tracks-container"></div>
         </section>
 
         <!-- Panic Stop -->
@@ -246,12 +274,12 @@
             <span id="modal-sound-detune-val">0</span>
           </div>
           <div class="form-group">
-            <label for="modal-sound-overlap">多重押下時</label>
+            <label for="modal-sound-overlap">重ね再生（多重押下時）</label>
             <select id="modal-sound-overlap" class="input">
-              <option value="overlap">重ね再生</option>
-              <option value="restart">頭出し再生</option>
-              <option value="toggle">トグル（再生/停止）</option>
-              <option value="single">排他（鳴り終わるまで無視）</option>
+              <option value="overlap">重ね再生 ON（連打時に音を重ねて鳴らす）</option>
+              <option value="restart">重ね再生 OFF（連打時に頭出し・最初から鳴らし直す）</option>
+              <option value="toggle">トグル再生（押すたびに 再生/一時停止）</option>
+              <option value="single">排他再生（鳴り終わるまで次の入力を無視）</option>
             </select>
           </div>
         </div>
@@ -301,12 +329,12 @@
             <span id="modal-cue-detune-val">0</span>
           </div>
           <div class="form-group">
-            <label for="modal-cue-overlap">多重押下時</label>
+            <label for="modal-cue-overlap">重ね再生（多重押下時）</label>
             <select id="modal-cue-overlap" class="input">
-              <option value="overlap">重ね再生</option>
-              <option value="restart">頭出し再生</option>
-              <option value="toggle">トグル（再生/停止）</option>
-              <option value="single">排他（鳴り終わるまで無視）</option>
+              <option value="overlap">重ね再生 ON（連打時に音を重ねて鳴らす）</option>
+              <option value="restart">重ね再生 OFF（連打時に頭出し・最初から鳴らし直す）</option>
+              <option value="toggle">トグル再生（押すたびに 再生/一時停止）</option>
+              <option value="single">排他再生（鳴り終わるまで次の入力を無視）</option>
             </select>
           </div>
         </div>
@@ -325,6 +353,7 @@
           </div>
         </div>
         <div class="modal-actions">
+          <button type="button" id="btn-cue-test" class="btn-secondary">▶ 試聴</button>
           <button type="button" id="btn-cue-cancel" class="btn-secondary">キャンセル</button>
           <button type="submit" class="btn-primary">保存</button>
         </div>

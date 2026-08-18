@@ -337,6 +337,31 @@ export class AudioEngine {
   }
 
   /**
+   * Toggle pause/resume for a specific track
+   * @param {string} trackId
+   */
+  toggleTrack(trackId) {
+    const track = this.activeTracks.get(trackId);
+    if (track) {
+      track.toggle();
+      this._emit('track:toggle', { trackId, state: track.state, track });
+    }
+  }
+
+  /**
+   * Set volume for a specific active track (0.0 to 2.0)
+   * @param {string} trackId
+   * @param {number} volume
+   */
+  setTrackVolume(trackId, volume) {
+    const track = this.activeTracks.get(trackId);
+    if (track) {
+      track.setVolume(volume);
+      this._emit('track:volume', { trackId, volume, track });
+    }
+  }
+
+  /**
    * Stop a specific active track
    * @param {string} trackId
    * @param {number} [fadeDuration=0]
