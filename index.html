@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="学校演劇用 効果音・せりふ再生アプリ - キーボード操作で舞台音響をポン出し">
+  <title>CS_sumpler - 舞台音響ポン出しシステム</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=M+PLUS+1p:wght@400;500;700;800;900&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="index.css">
+</head>
+<body>
+
+  <!-- ==================== AUDIO UNLOCK OVERLAY ==================== -->
+  <div id="unlock-overlay" class="unlock-overlay">
+    <div class="unlock-content">
+      <div class="unlock-icon">🎭</div>
+      <h1>CS_sumpler</h1>
+      <p class="unlock-subtitle">舞台音響ポン出しシステム</p>
+      <button id="btn-unlock" class="btn-unlock" type="button">
+        クリックして音声を有効化
+      </button>
+      <p class="unlock-hint">ブラウザの制約により、最初に1回クリックが必要です</p>
+    </div>
+  </div>
+
+  <!-- ==================== APP SHELL ==================== -->
+  <div id="app" class="app hidden">
+
+    <!-- ============ HEADER BAR ============ -->
+    <header id="app-header" class="app-header">
+      <div class="header-left">
+        <span class="header-logo">🎭</span>
+        <input type="text" id="project-name" class="project-name-input" value="学校演劇 音響プロジェクト" spellcheck="false" />
+      </div>
+      <div class="header-center">
+        <div id="master-volume-group" class="master-volume-group">
+          <button id="btn-mute" class="btn-icon" title="ミュート (M)">
+            <span class="icon-speaker">🔊</span>
+          </button>
+          <input type="range" id="master-volume" class="slider-volume" min="0" max="200" value="100" />
+          <span id="master-volume-label" class="volume-label">100%</span>
+        </div>
+      </div>
+      <div class="header-right">
+        <button id="btn-save" class="btn-header" title="プロジェクト保存">💾 保存</button>
+        <button id="btn-export" class="btn-header" title="エクスポート">📤</button>
+        <button id="btn-import" class="btn-header" title="インポート">📥</button>
+        <input type="file" id="file-import" accept=".json,.theatersound" class="hidden" />
+        <div class="mode-switcher">
+          <button id="btn-mode-setup" class="btn-mode active" data-mode="setup">設定</button>
+          <button id="btn-mode-live" class="btn-mode" data-mode="live">本番</button>
+        </div>
+      </div>
+    </header>
+
+    <!-- ============ SETUP MODE ============ -->
+    <main id="mode-setup" class="mode-panel mode-setup">
+
+      <!-- Left Column: Sound Library -->
+      <section class="setup-col setup-col-library">
+        <div class="panel-header">
+          <h2>音声ライブラリ</h2>
+          <span id="sound-count" class="badge">0</span>
+        </div>
+
+        <!-- Drop zone -->
+        <div id="drop-zone" class="drop-zone">
+          <div class="drop-zone-inner">
+            <span class="drop-icon">📁</span>
+            <p>音声ファイルをここにドラッグ＆ドロップ</p>
+            <p class="drop-hint">MP3 / WAV / OGG / M4A / FLAC / WebM</p>
+            <button id="btn-browse" class="btn-secondary" type="button">またはファイルを選択</button>
+            <input type="file" id="file-browse" multiple accept="audio/*,.mp3,.wav,.ogg,.m4a,.flac,.webm,.aac" class="hidden" />
+          </div>
+        </div>
+
+        <!-- Sound list -->
+        <ul id="sound-list" class="sound-list"></ul>
+      </section>
+
+      <!-- Center Column: Cue List -->
+      <section class="setup-col setup-col-cues">
+        <div class="panel-header">
+          <h2>キューリスト</h2>
+          <div class="act-controls">
+            <button id="btn-prev-act" class="btn-icon-sm" title="前の幕 (PageUp)">◀</button>
+            <select id="act-select" class="act-select"></select>
+            <button id="btn-next-act" class="btn-icon-sm" title="次の幕 (PageDown)">▶</button>
+            <button id="btn-add-act" class="btn-icon-sm btn-add" title="幕を追加">＋</button>
+            <button id="btn-remove-act" class="btn-icon-sm btn-remove" title="幕を削除">✕</button>
+          </div>
+        </div>
+        <div class="cue-toolbar">
+          <button id="btn-add-cue" class="btn-secondary">＋ キュー追加</button>
+        </div>
+        <ul id="cue-list" class="cue-list"></ul>
+      </section>
+
+      <!-- Right Column: Key Mapping -->
+      <section class="setup-col setup-col-keys">
+        <div class="panel-header">
+          <h2>キー割り当て</h2>
+        </div>
+
+        <!-- Visual keyboard -->
+        <div id="keyboard-visual" class="keyboard-visual">
+          <!-- Row 1: number keys -->
+          <div class="kb-row">
+            <div class="kb-key" data-code="Digit1"><span class="kb-label">1</span><span class="kb-assign"></span></div>
+            <div class="kb-key" data-code="Digit2"><span class="kb-label">2</span><span class="kb-assign"></span></div>
+            <div class="kb-key" data-code="Digit3"><span class="kb-label">3</span><span class="kb-assign"></span></div>
+            <div class="kb-key" data-code="Digit4"><span class="kb-label">4</span><span class="kb-assign"></span></div>
+            <div class="kb-key" data-code="Digit5"><span class="kb-label">5</span><span class="kb-assign"></span></div>
+            <div class="kb-key" data-code="Digit6"><span class="kb-label">6</span><span class="kb-assign"></span></div>
+            <div class="kb-key" data-code="Digit7"><span class="kb-label">7</span><span class="kb-assign"></span></div>
+            <div class="kb-key" data-code="Digit8"><span class="kb-label">8</span><span class="kb-assign"></span></div>
+            <div class="kb-key" data-code="Digit9"><span class="kb-label">9</span><span class="kb-assign"></span></div>
+            <div class="kb-key" data-code="Digit0"><span class="kb-label">0</span><span class="kb-assign"></span></div>
+          </div>
+          <!-- Row 2: QWERTY -->
+          <div class="kb-row kb-row-offset">
+            <div class="kb-key" data-code="KeyQ"><span class="kb-label">Q</span><span class="kb-assign"></span></div>
+            <div class="kb-key" data-code="KeyW"><span class="kb-label">W</span><span class="kb-assign"></span></div>
+            <div class="kb-key" data-code="KeyE"><span class="kb-label">E</span><span class="kb-assign"></span></div>
+            <div class="kb-key" data-code="KeyR"><span class="kb-label">R</span><span class="kb-assign"></span></div>
+            <div class="kb-key" data-code="KeyT"><span class="kb-label">T</span><span class="kb-assign"></span></div>
+            <div class="kb-key" data-code="KeyY"><span class="kb-label">Y</span><span class="kb-assign"></span></div>
+            <div class="kb-key" data-code="KeyU"><span class="kb-label">U</span><span class="kb-assign"></span></div>
+            <div class="kb-key" data-code="KeyI"><span class="kb-label">I</span><span class="kb-assign"></span></div>
+            <div class="kb-key" data-code="KeyO"><span class="kb-label">O</span><span class="kb-assign"></span></div>
+          </div>
+          <!-- Row 3: ASDFG -->
+          <div class="kb-row kb-row-offset2">
+            <div class="kb-key" data-code="KeyA"><span class="kb-label">A</span><span class="kb-assign"></span></div>
+            <div class="kb-key" data-code="KeyS"><span class="kb-label">S</span><span class="kb-assign"></span></div>
+            <div class="kb-key" data-code="KeyD"><span class="kb-label">D</span><span class="kb-assign"></span></div>
+            <div class="kb-key" data-code="KeyF"><span class="kb-label">F</span><span class="kb-assign"></span></div>
+            <div class="kb-key" data-code="KeyG"><span class="kb-label">G</span><span class="kb-assign"></span></div>
+            <div class="kb-key" data-code="KeyH"><span class="kb-label">H</span><span class="kb-assign"></span></div>
+            <div class="kb-key" data-code="KeyJ"><span class="kb-label">J</span><span class="kb-assign"></span></div>
+            <div class="kb-key" data-code="KeyK"><span class="kb-label">K</span><span class="kb-assign"></span></div>
+            <div class="kb-key" data-code="KeyL"><span class="kb-label">L</span><span class="kb-assign"></span></div>
+          </div>
+          <!-- Numpad Row (external keypad) -->
+          <div class="kb-divider-label">テンキー（外付けキーボード）</div>
+          <div class="kb-row">
+            <div class="kb-key kb-key-num" data-code="Numpad7"><span class="kb-label">7</span><span class="kb-assign"></span></div>
+            <div class="kb-key kb-key-num" data-code="Numpad8"><span class="kb-label">8</span><span class="kb-assign"></span></div>
+            <div class="kb-key kb-key-num" data-code="Numpad9"><span class="kb-label">9</span><span class="kb-assign"></span></div>
+          </div>
+          <div class="kb-row">
+            <div class="kb-key kb-key-num" data-code="Numpad4"><span class="kb-label">4</span><span class="kb-assign"></span></div>
+            <div class="kb-key kb-key-num" data-code="Numpad5"><span class="kb-label">5</span><span class="kb-assign"></span></div>
+            <div class="kb-key kb-key-num" data-code="Numpad6"><span class="kb-label">6</span><span class="kb-assign"></span></div>
+          </div>
+          <div class="kb-row">
+            <div class="kb-key kb-key-num" data-code="Numpad1"><span class="kb-label">1</span><span class="kb-assign"></span></div>
+            <div class="kb-key kb-key-num" data-code="Numpad2"><span class="kb-label">2</span><span class="kb-assign"></span></div>
+            <div class="kb-key kb-key-num" data-code="Numpad3"><span class="kb-label">3</span><span class="kb-assign"></span></div>
+          </div>
+        </div>
+        <p class="key-hint">キーをクリック → 割り当てる音声を選択</p>
+      </section>
+    </main>
+
+    <!-- ============ LIVE / PERFORMANCE MODE ============ -->
+    <main id="mode-live" class="mode-panel mode-live hidden">
+      <div class="live-layout">
+
+        <!-- Top: Cue Display -->
+        <section class="live-cue-display">
+          <div class="live-act-label">
+            <span id="live-act-name">第1幕</span>
+          </div>
+          <div class="live-cue-counter">
+            <span id="live-cue-num">0</span> / <span id="live-cue-total">0</span>
+          </div>
+          <div class="live-next-cue">
+            <span class="live-next-label">次に Space で再生：</span>
+            <span id="live-next-name" class="live-next-name">（キューなし）</span>
+          </div>
+        </section>
+
+        <!-- Middle: Cue scroll list (compact) -->
+        <section class="live-cue-scroll">
+          <ul id="live-cue-list" class="live-cue-list"></ul>
+        </section>
+
+        <!-- Direct Keys strip -->
+        <section class="live-direct-keys">
+          <div id="live-key-strip" class="live-key-strip"></div>
+        </section>
+
+        <!-- Active tracks / Now Playing -->
+        <section class="live-now-playing">
+          <div class="now-playing-header">再生中</div>
+          <div id="live-active-tracks" class="live-active-tracks"></div>
+        </section>
+
+        <!-- Panic Stop -->
+        <div class="live-panic">
+          <button id="btn-panic" class="btn-panic" type="button">
+            ■ 全停止（Esc）
+          </button>
+        </div>
+      </div>
+    </main>
+
+    <!-- ============ TOAST NOTIFICATIONS ============ -->
+    <div id="toast-container" class="toast-container"></div>
+
+  </div>
+
+  <!-- ============ MODAL: Sound Settings ============ -->
+  <dialog id="modal-sound-settings" class="modal">
+    <div class="modal-content">
+      <h3>音声設定</h3>
+      <form id="form-sound-settings">
+        <input type="hidden" id="modal-sound-id" />
+        <div class="form-group">
+          <label for="modal-sound-name">名前</label>
+          <input type="text" id="modal-sound-name" class="input" />
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="modal-sound-volume">音量</label>
+            <input type="range" id="modal-sound-volume" class="slider" min="0" max="200" value="100" />
+            <span id="modal-sound-volume-val">100%</span>
+          </div>
+          <div class="form-group">
+            <label for="modal-sound-rate">速度</label>
+            <input type="range" id="modal-sound-rate" class="slider" min="25" max="400" value="100" />
+            <span id="modal-sound-rate-val">1.0x</span>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="modal-sound-detune">ピッチ (cents)</label>
+            <input type="range" id="modal-sound-detune" class="slider" min="-2400" max="2400" value="0" />
+            <span id="modal-sound-detune-val">0</span>
+          </div>
+          <div class="form-group">
+            <label for="modal-sound-overlap">多重押下時</label>
+            <select id="modal-sound-overlap" class="input">
+              <option value="overlap">重ね再生</option>
+              <option value="restart">頭出し再生</option>
+              <option value="toggle">トグル（再生/停止）</option>
+              <option value="single">排他（鳴り終わるまで無視）</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" id="btn-sound-test" class="btn-secondary">▶ 試聴</button>
+          <button type="button" id="btn-sound-cancel" class="btn-secondary">キャンセル</button>
+          <button type="submit" class="btn-primary">保存</button>
+        </div>
+      </form>
+    </div>
+  </dialog>
+
+  <!-- ============ MODAL: Cue Edit ============ -->
+  <dialog id="modal-cue-edit" class="modal">
+    <div class="modal-content">
+      <h3>キュー編集</h3>
+      <form id="form-cue-edit">
+        <input type="hidden" id="modal-cue-id" />
+        <div class="form-group">
+          <label for="modal-cue-name">キュー名</label>
+          <input type="text" id="modal-cue-name" class="input" />
+        </div>
+        <div class="form-group">
+          <label for="modal-cue-sound">音声</label>
+          <select id="modal-cue-sound" class="input"></select>
+        </div>
+        <div class="form-group">
+          <label for="modal-cue-note">メモ（演出ノート）</label>
+          <input type="text" id="modal-cue-note" class="input" placeholder="例：照明と同時" />
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="modal-cue-volume">音量</label>
+            <input type="range" id="modal-cue-volume" class="slider" min="0" max="200" value="100" />
+            <span id="modal-cue-volume-val">100%</span>
+          </div>
+          <div class="form-group">
+            <label for="modal-cue-rate">速度</label>
+            <input type="range" id="modal-cue-rate" class="slider" min="25" max="400" value="100" />
+            <span id="modal-cue-rate-val">1.0x</span>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="modal-cue-detune">ピッチ (cents)</label>
+            <input type="range" id="modal-cue-detune" class="slider" min="-2400" max="2400" value="0" />
+            <span id="modal-cue-detune-val">0</span>
+          </div>
+          <div class="form-group">
+            <label for="modal-cue-overlap">多重押下時</label>
+            <select id="modal-cue-overlap" class="input">
+              <option value="overlap">重ね再生</option>
+              <option value="restart">頭出し再生</option>
+              <option value="toggle">トグル（再生/停止）</option>
+              <option value="single">排他（鳴り終わるまで無視）</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="modal-cue-loop" />
+              ループ再生
+            </label>
+          </div>
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="modal-cue-autoadvance" checked />
+              自動で次のキューへ進む
+            </label>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" id="btn-cue-cancel" class="btn-secondary">キャンセル</button>
+          <button type="submit" class="btn-primary">保存</button>
+        </div>
+      </form>
+    </div>
+  </dialog>
+
+  <!-- ============ MODAL: Key Assignment ============ -->
+  <dialog id="modal-key-assign" class="modal">
+    <div class="modal-content modal-narrow">
+      <h3>キー割り当て</h3>
+      <p id="key-assign-label" class="key-assign-label">キー: <kbd></kbd></p>
+      <input type="hidden" id="modal-key-code" />
+      <div class="form-group">
+        <label for="modal-key-sound">音声を選択</label>
+        <select id="modal-key-sound" class="input"></select>
+      </div>
+      <div class="modal-actions">
+        <button type="button" id="btn-key-clear" class="btn-danger-outline">割り当て解除</button>
+        <button type="button" id="btn-key-cancel" class="btn-secondary">キャンセル</button>
+        <button type="button" id="btn-key-save" class="btn-primary">保存</button>
+      </div>
+    </div>
+  </dialog>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

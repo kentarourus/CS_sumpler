@@ -1,0 +1,12 @@
+{
+  "name": "cs-sumpler",
+  "version": "1.0.0",
+  "description": "School theater sound effects and dialogue playback system",
+  "type": "module",
+  "scripts": {
+    "test": "node test/runTests.js"
+  },
+  "keywords": ["theater", "sound-effects", "cue", "web-audio-api", "soundboard"],
+  "author": "",
+  "license": "MIT"
+}
