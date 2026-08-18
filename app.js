@@ -1018,6 +1018,8 @@ function stopActiveTracksTimer() {
     clearInterval(activeTracksTimer);
     activeTracksTimer = null;
   }
+}
+
 // Helper to sync sound list play/stop button states with currently active tracks
 function updateSoundListPlayButtons() {
   if (!dom.soundList) return;
