@@ -76,6 +76,7 @@ export function createDefaultProject(name = '学校演劇 音響プロジェク�
     activeActId: act1.id,
     sounds: [], // SoundItem[]
     directSounds: [], // DirectSoundMapping[]
+    soundboard: createDefaultSoundboard('3x3'),
     keymaps: createDefaultKeymaps()
   };
 }
@@ -205,3 +206,53 @@ export function createDefaultKeymaps() {
     'Numpad9': { action: ActionType.PLAY_DIRECT, soundId: null, label: 'テンキー 9' }
   };
 }
+
+/**
+ * Soundboard Pad Color Presets
+ */
+export const PadColorPresets = [
+  { id: 'cyan', name: 'ネオンシアン', bg: '#00f2fe', color: '#00d2ff', border: '#4facfe' },
+  { id: 'blue', name: 'エレクトリックブルー', bg: '#4f8cff', color: '#6ba0ff', border: '#4f8cff' },
+  { id: 'purple', name: 'バイオレットパープル', bg: '#8a2be2', color: '#a78bfa', border: '#c084fc' },
+  { id: 'pink', name: 'マゼンタピンク', bg: '#f43f5e', color: '#fb7185', border: '#fda4af' },
+  { id: 'orange', name: 'サンセットオレンジ', bg: '#f97316', color: '#fb923c', border: '#fdba74' },
+  { id: 'amber', name: 'ゴールドアンバー', bg: '#f59e0b', color: '#fbbf24', border: '#fde68a' },
+  { id: 'emerald', name: 'エメラルドグリーン', bg: '#10b981', color: '#34d399', border: '#6ee7b7' },
+  { id: 'red', name: 'クリムゾンレッド', bg: '#ef4444', color: '#f87171', border: '#fca5a5' }
+];
+
+/**
+ * Soundboard Pad Factory
+ */
+export function createSoundboardPad(index, options = {}) {
+  const colors = ['cyan', 'blue', 'purple', 'pink', 'orange', 'amber', 'emerald', 'red'];
+  const defaultColor = colors[index % colors.length];
+  return {
+    id: options.id || `pad_${index}`,
+    index,
+    soundId: options.soundId || null,
+    label: options.label || '',
+    color: options.color || defaultColor,
+    volume: options.volume !== undefined ? options.volume : 1.0,
+    playbackRate: options.playbackRate !== undefined ? options.playbackRate : 1.0,
+    detune: options.detune !== undefined ? options.detune : 0,
+    loop: Boolean(options.loop),
+    overlapMode: options.overlapMode || 'overlap'
+  };
+}
+
+/**
+ * Soundboard Factory (pre-creates up to 25 slots for 3x3 / 4x4 / 5x5)
+ */
+export function createDefaultSoundboard(gridSize = '3x3') {
+  const count = 25;
+  const pads = [];
+  for (let i = 0; i < count; i++) {
+    pads.push(createSoundboardPad(i));
+  }
+  return {
+    gridSize, // '3x3' | '4x4' | '5x5'
+    pads
+  };
+}
+
