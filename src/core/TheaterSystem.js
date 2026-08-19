@@ -18,6 +18,8 @@ import {
   ActionType,
   SystemEvent,
   createDefaultProject,
+  createDefaultSoundboard,
+  createSoundboardPad,
   createSoundItem,
   generateId
 } from '../types/models.js';
@@ -112,6 +114,21 @@ export class TheaterSystem {
     });
 
     this.keymap.setAllBindings(this.project.keymaps);
+
+    // Ensure soundboard structure is valid
+    if (!this.project.soundboard) {
+      this.project.soundboard = createDefaultSoundboard('3x3');
+    } else {
+      if (!Array.isArray(this.project.soundboard.pads)) {
+        this.project.soundboard.pads = [];
+      }
+      while (this.project.soundboard.pads.length < 25) {
+        this.project.soundboard.pads.push(createSoundboardPad(this.project.soundboard.pads.length));
+      }
+      if (!this.project.soundboard.gridSize) {
+        this.project.soundboard.gridSize = '3x3';
+      }
+    }
   }
 
   /**
@@ -270,6 +287,15 @@ export class TheaterSystem {
       }
     }
     this.keymap.setAllBindings(bindings);
+
+    // Clean up soundboard pads referencing this sound
+    if (this.project.soundboard && Array.isArray(this.project.soundboard.pads)) {
+      for (const pad of this.project.soundboard.pads) {
+        if (pad.soundId === soundId) {
+          pad.soundId = null;
+        }
+      }
+    }
 
     await this.saveProject();
     this.emit('sound:removed', { soundId, sounds: this.project.sounds });
@@ -575,6 +601,160 @@ export class TheaterSystem {
       default:
         break;
     }
+  }
+
+  // ==========================================
+  // Soundboard API
+  // ==========================================
+
+  /**
+   * Get current Soundboard configuration
+   * @returns {Object}
+   */
+  getSoundboard() {
+    if (!this.project.soundboard) {
+      this.project.soundboard = createDefaultSoundboard('3x3');
+    }
+    return this.project.soundboard;
+  }
+
+  /**
+   * Get Soundboard Grid Size ('3x3' | '4x4' | '5x5')
+   * @returns {string}
+   */
+  getSoundboardGridSize() {
+    return this.project.soundboard?.gridSize || '3x3';
+  }
+
+  /**
+   * Set Soundboard Grid Size and persist
+   * @param {'3x3'|'4x4'|'5x5'} gridSize
+   */
+  async setSoundboardGridSize(gridSize) {
+    if (!['3x3', '4x4', '5x5'].includes(gridSize)) return;
+    if (!this.project.soundboard) {
+      this.project.soundboard = createDefaultSoundboard(gridSize);
+    } else {
+      this.project.soundboard.gridSize = gridSize;
+    }
+    await this.saveProject();
+    this.emit('soundboard:grid-change', { gridSize });
+  }
+
+  /**
+   * Get Pad by Index
+   * @param {number} padIndex
+   * @returns {Object|null}
+   */
+  getPad(padIndex) {
+    const sb = this.getSoundboard();
+    return sb.pads[padIndex] || null;
+  }
+
+  /**
+   * Update Pad properties
+   * @param {number} padIndex
+   * @param {Object} updates
+   */
+  async updatePad(padIndex, updates = {}) {
+    const sb = this.getSoundboard();
+    if (sb.pads[padIndex]) {
+      Object.assign(sb.pads[padIndex], updates);
+      await this.saveProject();
+      this.emit('soundboard:pad-updated', { padIndex, pad: sb.pads[padIndex] });
+    }
+  }
+
+  /**
+   * Assign a sound to a pad
+   * @param {number} padIndex
+   * @param {string} soundId
+   * @param {Object} [customOptions]
+   */
+  async assignSoundToPad(padIndex, soundId, customOptions = {}) {
+    const sb = this.getSoundboard();
+    const soundItem = this.getSound(soundId);
+    if (!sb.pads[padIndex]) {
+      sb.pads[padIndex] = createSoundboardPad(padIndex);
+    }
+    const pad = sb.pads[padIndex];
+    pad.soundId = soundId;
+    if (soundItem && !customOptions.label) {
+      pad.label = soundItem.name;
+    }
+    Object.assign(pad, customOptions);
+    await this.saveProject();
+    this.emit('soundboard:pad-updated', { padIndex, pad });
+  }
+
+  /**
+   * Clear sound assignment from a pad
+   * @param {number} padIndex
+   */
+  async clearPad(padIndex) {
+    const sb = this.getSoundboard();
+    if (sb.pads[padIndex]) {
+      sb.pads[padIndex].soundId = null;
+      sb.pads[padIndex].label = '';
+      await this.saveProject();
+      this.emit('soundboard:pad-updated', { padIndex, pad: sb.pads[padIndex] });
+    }
+  }
+
+  /**
+   * Clear all soundboard pad assignments
+   */
+  async clearAllPads() {
+    const sb = this.getSoundboard();
+    sb.pads.forEach((pad, idx) => {
+      pad.soundId = null;
+      pad.label = '';
+    });
+    await this.saveProject();
+    this.emit('soundboard:all-cleared', {});
+  }
+
+  /**
+   * Automatically fill soundboard pads from registered sound library
+   */
+  async autoFillPadsFromLibrary() {
+    const sounds = this.getAllSounds();
+    const sb = this.getSoundboard();
+    const limit = sb.gridSize === '5x5' ? 25 : (sb.gridSize === '4x4' ? 16 : 9);
+    for (let i = 0; i < limit; i++) {
+      if (sounds[i]) {
+        sb.pads[i].soundId = sounds[i].id;
+        sb.pads[i].label = sounds[i].name;
+      }
+    }
+    await this.saveProject();
+    this.emit('soundboard:all-updated', { soundboard: sb });
+  }
+
+  /**
+   * Trigger playback for a soundboard pad
+   * @param {number} padIndex
+   * @param {Object} [overrideOptions]
+   * @returns {AudioTrack|null}
+   */
+  playPad(padIndex, overrideOptions = {}) {
+    const pad = this.getPad(padIndex);
+    if (!pad || !pad.soundId) return null;
+
+    const soundItem = this.getSound(pad.soundId);
+    const options = {
+      name: pad.label || (soundItem ? soundItem.name : `Pad ${padIndex + 1}`),
+      volume: pad.volume !== undefined ? pad.volume : (soundItem ? soundItem.defaultVolume : 1.0),
+      playbackRate: pad.playbackRate !== undefined ? pad.playbackRate : (soundItem ? soundItem.defaultPlaybackRate : 1.0),
+      detune: pad.detune !== undefined ? pad.detune : (soundItem ? soundItem.defaultDetune : 0),
+      loop: Boolean(pad.loop),
+      overlapMode: pad.overlapMode || (soundItem ? soundItem.defaultOverlapMode : 'overlap'),
+      ...overrideOptions
+    };
+
+    const track = this.audio.playSound(pad.soundId, options);
+    this.emit('soundboard:pad-triggered', { padIndex, pad, track });
+    return track;
   }
 
   _handleAudioEvent(event, data) {

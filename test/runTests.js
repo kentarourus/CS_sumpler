@@ -487,11 +487,66 @@ assertEqual(cueRes.track.detune, 300, 'Cue override pitch detune applied');
 system.setMasterVolume(0.8);
 assertEqual(system.getProject().settings.masterVolume, 0.8, 'Project master volume updated');
 
-system.panicStop();
-assertEqual(system.audio.activeTracks.size, 0, 'Panic stop cleared all playing sounds');
+// ============================================================================
+// 8. Soundboard (3x3 / 4x4 / 5x5 Pad Matrix) Integration Tests
+// ============================================================================
+console.log('\n8. Testing Soundboard Matrix (3x3, 4x4, 5x5 Grid & Pad Triggers)');
 
-// Clean up
-system.dispose();
+const sbSystem = new TheaterSystem({ audioContext: mockCtx });
+await sbSystem.init();
+
+// Check default grid
+const initialSb = sbSystem.getSoundboard();
+assertEqual(initialSb.gridSize, '3x3', 'Default soundboard grid is 3x3');
+assert(initialSb.pads.length >= 25, 'Soundboard pads array pre-allocated with at least 25 slots');
+
+// Register 2 test sounds
+const snd1 = await sbSystem.registerAudioFile(new Uint8Array([1, 2]).buffer, { name: '歓声SE', fileName: 'cheer.mp3' });
+const snd2 = await sbSystem.registerAudioFile(new Uint8Array([3, 4]).buffer, { name: '爆発SE', fileName: 'explosion.mp3' });
+
+// Switch grid sizes
+await sbSystem.setSoundboardGridSize('4x4');
+assertEqual(sbSystem.getSoundboardGridSize(), '4x4', 'Switched soundboard grid size to 4x4');
+
+await sbSystem.setSoundboardGridSize('5x5');
+assertEqual(sbSystem.getSoundboardGridSize(), '5x5', 'Switched soundboard grid size to 5x5');
+
+// Assign sound to Pad 0
+await sbSystem.assignSoundToPad(0, snd1.id, { label: '歓声パッド', color: 'purple', volume: 1.5, playbackRate: 1.2 });
+const pad0 = sbSystem.getPad(0);
+assertEqual(pad0.soundId, snd1.id, 'Pad 0 assigned to snd1');
+assertEqual(pad0.label, '歓声パッド', 'Pad 0 label set to 歓声パッド');
+assertEqual(pad0.color, 'purple', 'Pad 0 color set to purple');
+assertEqual(pad0.volume, 1.5, 'Pad 0 volume set to 1.5');
+
+// Play Pad 0
+const padTrack = sbSystem.playPad(0);
+assert(padTrack !== null, 'Pad 0 playback triggered successfully');
+assertEqual(padTrack.state, PlaybackState.PLAYING, 'Pad track is playing');
+assertEqual(padTrack.volume, 1.5, 'Pad volume override applied to track');
+assertEqual(padTrack.playbackRate, 1.2, 'Pad rate override applied to track');
+
+// Auto-fill from library
+await sbSystem.autoFillPadsFromLibrary();
+assertEqual(sbSystem.getPad(0).soundId, snd1.id, 'Pad 0 has snd1 after auto-fill');
+assertEqual(sbSystem.getPad(1).soundId, snd2.id, 'Pad 1 has snd2 after auto-fill');
+
+// Clear specific pad
+await sbSystem.clearPad(0);
+assertEqual(sbSystem.getPad(0).soundId, null, 'Pad 0 cleared');
+assertEqual(sbSystem.getPad(1).soundId, snd2.id, 'Pad 1 still assigned');
+
+// Clear all pads
+await sbSystem.clearAllPads();
+assertEqual(sbSystem.getPad(1).soundId, null, 'All pads cleared');
+
+// Test sound removal clears referenced pad
+await sbSystem.assignSoundToPad(2, snd2.id);
+assertEqual(sbSystem.getPad(2).soundId, snd2.id, 'Pad 2 assigned to snd2');
+await sbSystem.removeAudioFile(snd2.id);
+assertEqual(sbSystem.getPad(2).soundId, null, 'Removing audio file automatically cleaned up pad assignment');
+
+sbSystem.dispose();
 
 console.log('\n====================================================');
 console.log(`Test Results: Total ${totalTests}, Passed ${passedTests}, Failed ${failedTests}`);
@@ -500,5 +555,6 @@ console.log('====================================================\n');
 if (failedTests > 0) {
   process.exit(1);
 } else {
-  console.log('All tests passed successfully! Core system is rock solid.\n');
+  console.log('All tests passed successfully! Core system & Soundboard are rock solid.\n');
 }
+

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="ja" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -48,6 +48,7 @@
         <button id="btn-export" class="btn-header" title="エクスポート">📤</button>
         <button id="btn-import" class="btn-header" title="インポート">📥</button>
         <input type="file" id="file-import" accept=".json,.theatersound" class="hidden" />
+        <button id="btn-theme-toggle" class="btn-header btn-theme" title="ダーク/ライト切り替え">🌙</button>
         <div class="mode-switcher">
           <button id="btn-mode-setup" class="btn-mode active" data-mode="setup">設定</button>
           <button id="btn-mode-live" class="btn-mode" data-mode="live">本番</button>
@@ -84,11 +85,25 @@
         <ul id="sound-list" class="sound-list"></ul>
       </section>
 
-      <!-- Center Column: Cue List -->
-      <section class="setup-col setup-col-cues">
-        <div class="panel-header">
-          <h2>キューリスト</h2>
-          <div class="act-controls">
+      <!-- Center Column: Soundboard & Cue List Center Panel -->
+      <section class="setup-col setup-col-center">
+        <div class="panel-header panel-header-tabs">
+          <div class="center-panel-tabs">
+            <button id="tab-btn-soundboard" class="center-tab active" type="button">🎛 サウンドボード</button>
+            <button id="tab-btn-cues" class="center-tab" type="button">📋 キューリスト</button>
+          </div>
+          <!-- Soundboard Tools in Header -->
+          <div id="soundboard-header-tools" class="soundboard-header-tools">
+            <div class="grid-size-selector" title="グリッド切り替え">
+              <button type="button" class="btn-grid-size active" data-grid="3x3">3×3</button>
+              <button type="button" class="btn-grid-size" data-grid="4x4">4×4</button>
+              <button type="button" class="btn-grid-size" data-grid="5x5">5×5</button>
+            </div>
+            <button id="btn-autofill-soundboard" class="btn-icon-text-sm" type="button" title="ライブラリ音声を順に自動割り当て">⚡ 自動配置</button>
+            <button id="btn-clear-soundboard" class="btn-icon-text-sm btn-danger-text" type="button" title="全パッドの割り当てを解除">🗑 クリア</button>
+          </div>
+          <!-- Cue Controls (shown when Cue tab is active) -->
+          <div id="cue-act-controls" class="act-controls hidden">
             <button id="btn-prev-act" class="btn-icon-sm" title="前の幕 (PageUp)">◀</button>
             <select id="act-select" class="act-select"></select>
             <button id="btn-next-act" class="btn-icon-sm" title="次の幕 (PageDown)">▶</button>
@@ -96,10 +111,28 @@
             <button id="btn-remove-act" class="btn-icon-sm btn-remove" title="幕を削除">✕</button>
           </div>
         </div>
-        <div class="cue-toolbar">
-          <button id="btn-add-cue" class="btn-secondary">＋ キュー追加</button>
+
+        <!-- Tab Content 1: Soundboard -->
+        <div id="view-soundboard" class="center-tab-view soundboard-view">
+          <div class="soundboard-container">
+            <div id="soundboard-grid" class="soundboard-grid grid-3x3">
+              <!-- Pads dynamically generated here -->
+            </div>
+          </div>
+          <div class="soundboard-footer-hint">
+            <span>💡 タッチ/クリックで低遅延再生</span>
+            <span>📁 音声をドラッグ＆ドロップで割り当て</span>
+            <span>⚙ 歯車で色・音量・ループ設定</span>
+          </div>
         </div>
-        <ul id="cue-list" class="cue-list"></ul>
+
+        <!-- Tab Content 2: Cue List -->
+        <div id="view-cues" class="center-tab-view cues-view hidden">
+          <div class="cue-toolbar">
+            <button id="btn-add-cue" class="btn-secondary">＋ キュー追加</button>
+          </div>
+          <ul id="cue-list" class="cue-list"></ul>
+        </div>
       </section>
 
       <!-- Right Column: Key Mapping -->
@@ -376,6 +409,71 @@
         <button type="button" id="btn-key-cancel" class="btn-secondary">キャンセル</button>
         <button type="button" id="btn-key-save" class="btn-primary">保存</button>
       </div>
+    </div>
+  </dialog>
+
+  <!-- ============ MODAL: Soundboard Pad Settings ============ -->
+  <dialog id="modal-pad-settings" class="modal">
+    <div class="modal-content">
+      <h3>パッド設定 (<span id="modal-pad-index-label">Pad 1</span>)</h3>
+      <form id="form-pad-settings">
+        <input type="hidden" id="modal-pad-index" />
+        <div class="form-group">
+          <label for="modal-pad-name">パッド名・表示ラベル</label>
+          <input type="text" id="modal-pad-name" class="input" placeholder="例: 爆発音 / チャイム" />
+        </div>
+        <div class="form-group">
+          <label for="modal-pad-sound">割り当て音声</label>
+          <select id="modal-pad-sound" class="input"></select>
+        </div>
+        <div class="form-group">
+          <label>パッドカラー</label>
+          <div id="pad-color-picker" class="pad-color-picker">
+            <!-- Dynamic color choices -->
+          </div>
+          <input type="hidden" id="modal-pad-color" value="cyan" />
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="modal-pad-volume">音量</label>
+            <input type="range" id="modal-pad-volume" class="slider" min="0" max="200" value="100" />
+            <span id="modal-pad-volume-val">100%</span>
+          </div>
+          <div class="form-group">
+            <label for="modal-pad-rate">速度</label>
+            <input type="range" id="modal-pad-rate" class="slider" min="25" max="400" value="100" />
+            <span id="modal-pad-rate-val">1.0x</span>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="modal-pad-detune">ピッチ (cents)</label>
+            <input type="range" id="modal-pad-detune" class="slider" min="-2400" max="2400" value="0" />
+            <span id="modal-pad-detune-val">0</span>
+          </div>
+          <div class="form-group">
+            <label for="modal-pad-overlap">重ね再生</label>
+            <select id="modal-pad-overlap" class="input">
+              <option value="overlap">重ね再生 ON（連打時に重ねて鳴らす）</option>
+              <option value="restart">頭出し再生（連打時に最初から鳴らし直す）</option>
+              <option value="toggle">トグル再生（押すたびに 再生/停止）</option>
+              <option value="single">排他再生（鳴り終わるまで次を無視）</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="checkbox-label">
+            <input type="checkbox" id="modal-pad-loop" />
+            ループ再生
+          </label>
+        </div>
+        <div class="modal-actions">
+          <button type="button" id="btn-pad-test" class="btn-secondary">▶ 試聴</button>
+          <button type="button" id="btn-pad-clear" class="btn-danger-outline">割り当て解除</button>
+          <button type="button" id="btn-pad-cancel" class="btn-secondary">キャンセル</button>
+          <button type="submit" class="btn-primary">保存</button>
+        </div>
+      </form>
     </div>
   </dialog>
 

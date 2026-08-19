@@ -6,7 +6,7 @@
  */
 
 import { TheaterSystem } from './src/core/TheaterSystem.js';
-import { ActionType } from './src/types/models.js';
+import { ActionType, PadColorPresets, createSoundboardPad } from './src/types/models.js';
 
 // ============================================================================
 // Globals
@@ -49,6 +49,18 @@ function cacheDom() {
   dom.btnBrowseFolder = $('#btn-browse-folder');
   dom.fileBrowseFolder = $('#file-browse-folder');
   dom.soundList       = $('#sound-list');
+
+  // Setup - Center Panel (Soundboard & Cues)
+  dom.tabBtnSoundboard     = $('#tab-btn-soundboard');
+  dom.tabBtnCues           = $('#tab-btn-cues');
+  dom.viewSoundboard       = $('#view-soundboard');
+  dom.viewCues             = $('#view-cues');
+  dom.soundboardHeaderTools = $('#soundboard-header-tools');
+  dom.cueActControls       = $('#cue-act-controls');
+  dom.soundboardGrid       = $('#soundboard-grid');
+  dom.btnGridSizes         = $$('.btn-grid-size');
+  dom.btnAutofillSoundboard = $('#btn-autofill-soundboard');
+  dom.btnClearSoundboard   = $('#btn-clear-soundboard');
 
   // Setup - Cues
   dom.actSelect       = $('#act-select');
@@ -93,9 +105,14 @@ function cacheDom() {
   dom.modalCue        = $('#modal-cue-edit');
   dom.formCue         = $('#form-cue-edit');
   dom.modalKeyAssign  = $('#modal-key-assign');
+  dom.modalPad        = $('#modal-pad-settings');
+  dom.formPad         = $('#form-pad-settings');
 
   // Toast
   dom.toastContainer  = $('#toast-container');
+
+  // Theme Toggle
+  dom.btnThemeToggle  = $('#btn-theme-toggle');
 }
 
 // ============================================================================
@@ -103,6 +120,7 @@ function cacheDom() {
 // ============================================================================
 document.addEventListener('DOMContentLoaded', () => {
   cacheDom();
+  restoreTheme();
   setupUnlockFlow();
 });
 
@@ -122,6 +140,7 @@ function setupUnlockFlow() {
 function initUI() {
   bindHeaderEvents();
   bindDropZone();
+  bindSoundboardControls();
   bindCueControls();
   bindKeyboardVisual();
   bindLiveControls();
@@ -135,6 +154,7 @@ function initUI() {
   syncProjectName();
   syncMasterVolume();
   renderSoundList();
+  renderSoundboard();
   renderActSelect();
   renderCueList();
   renderKeyboardVisual();
@@ -214,6 +234,7 @@ function bindHeaderEvents() {
       syncProjectName();
       syncMasterVolume();
       renderSoundList();
+      renderSoundboard();
       renderActSelect();
       renderCueList();
       renderKeyboardVisual();
@@ -227,6 +248,9 @@ function bindHeaderEvents() {
   // Mode Switch
   dom.btnModeSetup.addEventListener('click', () => switchMode('setup'));
   dom.btnModeLive.addEventListener('click', () => switchMode('live'));
+
+  // Theme Toggle
+  dom.btnThemeToggle.addEventListener('click', toggleTheme);
 }
 
 function syncProjectName() {
@@ -247,6 +271,28 @@ function updateMuteButton(isMuted) {
 }
 
 // ============================================================================
+// THEME TOGGLE (Dark / Light)
+// ============================================================================
+function toggleTheme() {
+  const html = document.documentElement;
+  const current = html.getAttribute('data-theme') || 'dark';
+  const next = current === 'dark' ? 'light' : 'dark';
+  html.setAttribute('data-theme', next);
+  dom.btnThemeToggle.textContent = next === 'dark' ? '🌙' : '☀️';
+  localStorage.setItem('cs_sumpler_theme', next);
+}
+
+function restoreTheme() {
+  const saved = localStorage.getItem('cs_sumpler_theme');
+  if (saved && (saved === 'light' || saved === 'dark')) {
+    document.documentElement.setAttribute('data-theme', saved);
+    if (dom.btnThemeToggle) {
+      dom.btnThemeToggle.textContent = saved === 'dark' ? '🌙' : '☀️';
+    }
+  }
+}
+
+// ============================================================================
 // MODE SWITCHING
 // ============================================================================
 function switchMode(mode) {
@@ -263,6 +309,7 @@ function switchMode(mode) {
   } else {
     stopActiveTracksTimer();
     renderSoundList();
+    renderSoundboard();
     renderCueList();
     renderKeyboardVisual();
   }
@@ -418,6 +465,7 @@ async function handleFiles(fileList) {
   }
 
   renderSoundList();
+  renderSoundboard();
   renderKeyboardVisual();
 
   if (successCount === 1) {
@@ -515,6 +563,7 @@ function renderSoundList() {
       if (confirm(`「${s.name}」を削除しますか？`)) {
         await system.removeAudioFile(s.id);
         renderSoundList();
+        renderSoundboard();
         renderCueList();
         renderKeyboardVisual();
         showToast(`削除: ${s.name}`, 'info');
@@ -529,6 +578,184 @@ function renderSoundList() {
     li.addEventListener('dragend', () => li.classList.remove('dragging'));
 
     dom.soundList.appendChild(li);
+  });
+}
+
+// ============================================================================
+// SOUNDBOARD CONTROLS & RENDERING
+// ============================================================================
+let currentCenterTab = 'soundboard'; // 'soundboard' | 'cues'
+
+function switchCenterTab(tab) {
+  currentCenterTab = tab;
+  dom.tabBtnSoundboard.classList.toggle('active', tab === 'soundboard');
+  dom.tabBtnCues.classList.toggle('active', tab === 'cues');
+  dom.viewSoundboard.classList.toggle('hidden', tab !== 'soundboard');
+  dom.viewCues.classList.toggle('hidden', tab !== 'cues');
+  dom.soundboardHeaderTools.classList.toggle('hidden', tab !== 'soundboard');
+  dom.cueActControls.classList.toggle('hidden', tab !== 'cues');
+
+  if (tab === 'soundboard') {
+    renderSoundboard();
+  } else {
+    renderCueList();
+  }
+}
+
+function bindSoundboardControls() {
+  // Tab switching
+  dom.tabBtnSoundboard.addEventListener('click', () => switchCenterTab('soundboard'));
+  dom.tabBtnCues.addEventListener('click', () => switchCenterTab('cues'));
+
+  // Grid size selector
+  dom.btnGridSizes.forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const grid = btn.dataset.grid;
+      if (grid) {
+        await system.setSoundboardGridSize(grid);
+        renderSoundboard();
+        showToast(`グリッド切り替え: ${grid}`, 'info', 1500);
+      }
+    });
+  });
+
+  // Autofill button
+  dom.btnAutofillSoundboard.addEventListener('click', async () => {
+    const sounds = system.getAllSounds();
+    if (sounds.length === 0) {
+      showToast('ライブラリに音声がありません。ファイルを先に登録してください', 'info');
+      return;
+    }
+    await system.autoFillPadsFromLibrary();
+    renderSoundboard();
+    showToast('音声をパッドに自動配置しました', 'success');
+  });
+
+  // Clear button
+  dom.btnClearSoundboard.addEventListener('click', async () => {
+    if (confirm('全パッドの割り当てをクリアしますか？')) {
+      await system.clearAllPads();
+      renderSoundboard();
+      showToast('全パッドの割り当てをクリアしました', 'info');
+    }
+  });
+}
+
+function renderSoundboard() {
+  if (!dom.soundboardGrid) return;
+  const sb = system.getSoundboard();
+  const gridSize = sb.gridSize || '3x3';
+  const padCount = gridSize === '5x5' ? 25 : (gridSize === '4x4' ? 16 : 9);
+
+  // Sync grid class & buttons
+  dom.soundboardGrid.className = `soundboard-grid grid-${gridSize}`;
+  dom.btnGridSizes.forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.grid === gridSize);
+  });
+
+  dom.soundboardGrid.innerHTML = '';
+
+  const activeSoundIds = new Set(
+    Array.from(system.audio.activeTracks.values())
+      .filter(t => t.state === 'playing' || t.state === 'paused')
+      .map(t => t.soundId)
+  );
+
+  for (let i = 0; i < padCount; i++) {
+    const pad = sb.pads[i] || createSoundboardPad(i);
+    const soundItem = pad.soundId ? system.getSound(pad.soundId) : null;
+    const isAssigned = Boolean(pad.soundId && soundItem);
+    const isPlaying = isAssigned && activeSoundIds.has(pad.soundId);
+
+    const padEl = document.createElement('div');
+    const colorTheme = pad.color || 'cyan';
+    padEl.className = `sb-pad pad-theme-${colorTheme} ${isAssigned ? 'sb-pad-assigned' : 'sb-pad-empty'} ${isPlaying ? 'is-playing' : ''}`;
+    padEl.dataset.padIndex = i;
+
+    const padName = isAssigned ? (pad.label || soundItem.name) : '＋ 割り当て';
+
+    let badges = '';
+    if (isAssigned) {
+      if (pad.volume !== 1.0) badges += `<span class="sb-pad-badge">${Math.round(pad.volume * 100)}%</span>`;
+      if (pad.playbackRate !== 1.0) badges += `<span class="sb-pad-badge">${pad.playbackRate.toFixed(1)}x</span>`;
+      if (pad.loop) badges += '<span class="sb-pad-badge">LOOP</span>';
+      if (pad.overlapMode && pad.overlapMode !== 'overlap') badges += `<span class="sb-pad-badge">${pad.overlapMode.toUpperCase()}</span>`;
+    }
+
+    padEl.innerHTML = `
+      <div class="sb-pad-header">
+        <span class="sb-pad-idx">${i + 1}</span>
+        <div class="sb-pad-tools">
+          <button type="button" class="sb-pad-btn-gear" title="設定・色変更">⚙</button>
+        </div>
+      </div>
+      <div class="sb-pad-body">
+        ${isAssigned ? `<div class="sb-pad-name">${escHtml(padName)}</div>` : `<div class="sb-pad-empty-text">＋ 割り当て</div>`}
+      </div>
+      <div class="sb-pad-footer">
+        <div class="sb-pad-badges">${badges}</div>
+        <span class="sb-pad-vol-ind">${isAssigned && soundItem.duration ? formatTime(soundItem.duration) : ''}</span>
+      </div>
+    `;
+
+    // Gear button: open settings modal
+    const gearBtn = padEl.querySelector('.sb-pad-btn-gear');
+    gearBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openPadSettingsModal(i);
+    });
+
+    // Pointerdown / Touch for low-latency trigger
+    padEl.addEventListener('pointerdown', (e) => {
+      if (e.target.closest('.sb-pad-btn-gear')) return;
+      if (isAssigned) {
+        system.playPad(i);
+        padEl.classList.add('is-pressed');
+        setTimeout(() => padEl.classList.remove('is-pressed'), 120);
+        updateSoundboardPlayingStates();
+      } else {
+        openPadSettingsModal(i);
+      }
+    });
+
+    // Drag and drop assignment
+    padEl.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      padEl.classList.add('drag-over');
+    });
+    padEl.addEventListener('dragleave', () => {
+      padEl.classList.remove('drag-over');
+    });
+    padEl.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      padEl.classList.remove('drag-over');
+      const soundId = e.dataTransfer.getData('text/sound-id');
+      if (soundId) {
+        await system.assignSoundToPad(i, soundId);
+        renderSoundboard();
+        const soundItem = system.getSound(soundId);
+        showToast(`Pad ${i + 1} に「${soundItem ? soundItem.name : ''}」を割り当てました`, 'success');
+      }
+    });
+
+    dom.soundboardGrid.appendChild(padEl);
+  }
+}
+
+function updateSoundboardPlayingStates() {
+  if (!dom.soundboardGrid) return;
+  const activeSoundIds = new Set(
+    Array.from(system.audio.activeTracks.values())
+      .filter(t => t.state === 'playing' || t.state === 'paused')
+      .map(t => t.soundId)
+  );
+
+  const pads = dom.soundboardGrid.querySelectorAll('.sb-pad');
+  pads.forEach(padEl => {
+    const idx = parseInt(padEl.dataset.padIndex, 10);
+    const pad = system.getPad(idx);
+    const isPlaying = Boolean(pad && pad.soundId && activeSoundIds.has(pad.soundId));
+    padEl.classList.toggle('is-playing', isPlaying);
   });
 }
 
@@ -1260,6 +1487,168 @@ function bindModals() {
   });
 
   $('#btn-key-cancel').addEventListener('click', () => dom.modalKeyAssign.close());
+
+  // --- Soundboard Pad Settings Modal ---
+  dom.formPad.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    stopPadModalPreview();
+
+    const padIndex = parseInt($('#modal-pad-index').value, 10);
+    const soundId = $('#modal-pad-sound').value || null;
+    const label = $('#modal-pad-name').value.trim();
+    const color = $('#modal-pad-color').value || 'cyan';
+    const volume = parseInt($('#modal-pad-volume').value, 10) / 100;
+    const playbackRate = parseInt($('#modal-pad-rate').value, 10) / 100;
+    const detune = parseInt($('#modal-pad-detune').value, 10);
+    const overlapMode = $('#modal-pad-overlap').value;
+    const loop = $('#modal-pad-loop').checked;
+
+    await system.updatePad(padIndex, {
+      soundId,
+      label,
+      color,
+      volume,
+      playbackRate,
+      detune,
+      overlapMode,
+      loop
+    });
+
+    renderSoundboard();
+    dom.modalPad.close();
+    showToast(`Pad ${padIndex + 1} の設定を保存しました`, 'success');
+  });
+
+  $('#btn-pad-clear').addEventListener('click', async () => {
+    stopPadModalPreview();
+    const padIndex = parseInt($('#modal-pad-index').value, 10);
+    await system.clearPad(padIndex);
+    renderSoundboard();
+    dom.modalPad.close();
+    showToast(`Pad ${padIndex + 1} の割り当てを解除しました`, 'info');
+  });
+
+  $('#btn-pad-cancel').addEventListener('click', () => {
+    stopPadModalPreview();
+    dom.modalPad.close();
+  });
+
+  dom.modalPad.addEventListener('close', () => {
+    stopPadModalPreview();
+  });
+
+  // Pad Test Play / Stop
+  $('#btn-pad-test').addEventListener('click', () => {
+    const soundId = $('#modal-pad-sound').value;
+    if (!soundId) {
+      showToast('音声が選択されていません', 'info');
+      return;
+    }
+
+    if (currentPadTestTrackId && system.audio.activeTracks.has(currentPadTestTrackId)) {
+      stopPadModalPreview();
+      renderActiveTracksManager();
+    } else {
+      const track = system.audio.playSound(soundId, {
+        volume: parseInt($('#modal-pad-volume').value, 10) / 100,
+        playbackRate: parseInt($('#modal-pad-rate').value, 10) / 100,
+        detune: parseInt($('#modal-pad-detune').value, 10),
+        loop: $('#modal-pad-loop').checked,
+        overlapMode: 'restart'
+      });
+      if (track) {
+        currentPadTestTrackId = track.id;
+        const btn = $('#btn-pad-test');
+        btn.textContent = '⏹ 停止';
+        btn.classList.add('is-playing');
+      }
+      renderActiveTracksManager();
+    }
+  });
+
+  // Pad sliders live labels
+  $('#modal-pad-volume').addEventListener('input', function() {
+    $('#modal-pad-volume-val').textContent = this.value + '%';
+  });
+  $('#modal-pad-rate').addEventListener('input', function() {
+    $('#modal-pad-rate-val').textContent = (parseInt(this.value) / 100).toFixed(2) + 'x';
+  });
+  $('#modal-pad-detune').addEventListener('input', function() {
+    $('#modal-pad-detune-val').textContent = this.value;
+  });
+}
+
+let currentPadTestTrackId = null;
+
+function resetPadTestBtn() {
+  const btn = $('#btn-pad-test');
+  if (btn) {
+    btn.textContent = '▶ 試聴';
+    btn.classList.remove('is-playing');
+  }
+  currentPadTestTrackId = null;
+}
+
+function stopPadModalPreview() {
+  if (currentPadTestTrackId) {
+    system.stopTrack(currentPadTestTrackId);
+    resetPadTestBtn();
+  }
+}
+
+function openPadSettingsModal(padIndex) {
+  const pad = system.getPad(padIndex) || createSoundboardPad(padIndex);
+  $('#modal-pad-index').value = padIndex;
+  $('#modal-pad-index-label').textContent = `Pad ${padIndex + 1}`;
+  $('#modal-pad-name').value = pad.label || '';
+
+  // Sound dropdown
+  const soundSelect = $('#modal-pad-sound');
+  soundSelect.innerHTML = '<option value="">（未割り当て）</option>';
+  system.getAllSounds().forEach(s => {
+    const opt = document.createElement('option');
+    opt.value = s.id;
+    opt.textContent = s.name;
+    if (pad.soundId === s.id) opt.selected = true;
+    soundSelect.appendChild(opt);
+  });
+
+  // Color picker
+  const picker = $('#pad-color-picker');
+  picker.innerHTML = '';
+  const selectedColor = pad.color || 'cyan';
+  $('#modal-pad-color').value = selectedColor;
+
+  PadColorPresets.forEach(p => {
+    const swatch = document.createElement('div');
+    swatch.className = `pad-color-swatch pad-theme-${p.id} ${p.id === selectedColor ? 'selected' : ''}`;
+    swatch.title = p.name;
+    swatch.style.backgroundColor = p.color;
+    swatch.addEventListener('click', () => {
+      picker.querySelectorAll('.pad-color-swatch').forEach(s => s.classList.remove('selected'));
+      swatch.classList.add('selected');
+      $('#modal-pad-color').value = p.id;
+    });
+    picker.appendChild(swatch);
+  });
+
+  // Slider values
+  const vol = Math.round((pad.volume !== undefined ? pad.volume : 1.0) * 100);
+  $('#modal-pad-volume').value = vol;
+  $('#modal-pad-volume-val').textContent = vol + '%';
+
+  const rate = Math.round((pad.playbackRate !== undefined ? pad.playbackRate : 1.0) * 100);
+  $('#modal-pad-rate').value = rate;
+  $('#modal-pad-rate-val').textContent = (rate / 100).toFixed(2) + 'x';
+
+  $('#modal-pad-detune').value = pad.detune || 0;
+  $('#modal-pad-detune-val').textContent = pad.detune || 0;
+
+  $('#modal-pad-overlap').value = pad.overlapMode || 'overlap';
+  $('#modal-pad-loop').checked = Boolean(pad.loop);
+
+  resetPadTestBtn();
+  dom.modalPad.showModal();
 }
 
 function openSoundSettingsModal(soundId) {
@@ -1351,6 +1740,13 @@ function openKeyAssignModal(code) {
 // SYSTEM EVENT SUBSCRIPTIONS
 // ============================================================================
 function subscribeSystemEvents() {
+  // Soundboard events
+  system.on('soundboard:grid-change', () => renderSoundboard());
+  system.on('soundboard:pad-updated', () => renderSoundboard());
+  system.on('soundboard:all-updated', () => renderSoundboard());
+  system.on('soundboard:all-cleared', () => renderSoundboard());
+  system.on('soundboard:pad-triggered', () => updateSoundboardPlayingStates());
+
   // Cue changes
   system.on('cue:triggered', () => {
     if (currentMode === 'live') renderLiveView();
@@ -1367,14 +1763,46 @@ function subscribeSystemEvents() {
   });
 
   // Audio events (active tracks manager)
-  system.on('track:play', () => renderActiveTracksManager());
-  system.on('track:pause', () => renderActiveTracksManager());
-  system.on('track:resume', () => renderActiveTracksManager());
-  system.on('track:stop', () => renderActiveTracksManager());
-  system.on('track:ended', () => renderActiveTracksManager());
-  system.on('all:stop', () => renderActiveTracksManager());
-  system.on('all:pause', () => renderActiveTracksManager());
-  system.on('all:resume', () => renderActiveTracksManager());
+  system.on('track:play', () => {
+    renderActiveTracksManager();
+    updateSoundboardPlayingStates();
+    updateSoundListPlayButtons();
+  });
+  system.on('track:pause', () => {
+    renderActiveTracksManager();
+    updateSoundboardPlayingStates();
+    updateSoundListPlayButtons();
+  });
+  system.on('track:resume', () => {
+    renderActiveTracksManager();
+    updateSoundboardPlayingStates();
+    updateSoundListPlayButtons();
+  });
+  system.on('track:stop', () => {
+    renderActiveTracksManager();
+    updateSoundboardPlayingStates();
+    updateSoundListPlayButtons();
+  });
+  system.on('track:ended', () => {
+    renderActiveTracksManager();
+    updateSoundboardPlayingStates();
+    updateSoundListPlayButtons();
+  });
+  system.on('all:stop', () => {
+    renderActiveTracksManager();
+    updateSoundboardPlayingStates();
+    updateSoundListPlayButtons();
+  });
+  system.on('all:pause', () => {
+    renderActiveTracksManager();
+    updateSoundboardPlayingStates();
+    updateSoundListPlayButtons();
+  });
+  system.on('all:resume', () => {
+    renderActiveTracksManager();
+    updateSoundboardPlayingStates();
+    updateSoundListPlayButtons();
+  });
 
   // Volume
   system.on('volume:change', (data) => {
